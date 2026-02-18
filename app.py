@@ -1,7 +1,7 @@
 import streamlit as st
 import pandas as pd
 import gspread
-import json
+import numpy as np
 from google.oauth2.service_account import Credentials
 
 st.set_page_config(page_title="High Cost Utilizer Dashboard", page_icon="💊", layout="wide")
@@ -25,12 +25,8 @@ def load_data():
     # Load enrolled HCUs
     enrolled_df = pd.DataFrame(sheet.worksheet("HCU Enrolled Data").get_all_records())
 
-    # Log raw enrollment dates for debugging
-    if not enrolled_df.empty:
-        st.write("Sample enrollment dates:", enrolled_df['enrollmentDate'].head(5).tolist())
-
-    # Try parsing enrollment date flexibly
-    enrolled_df['enrollmentDate'] = pd.to_datetime(enrolled_df['enrollmentDate'], errors='coerce', dayfirst=True)
+    # Parse enrollment date from Unix timestamp (milliseconds)
+    enrolled_df['enrollmentDate'] = pd.to_datetime(enrolled_df['enrollmentDate'], unit='ms', errors='coerce')
 
     return hcu_df, enrolled_df
 
@@ -42,7 +38,8 @@ def build_summary(hcu_df, enrolled_df):
         Total_HCUs=('userId', 'count')
     ).reset_index()
 
-    total['HCU Enrollment Target'] = (total['Total_HCUs'] * 0.05).ceil().astype(int)
+    # 5% enrollment target
+    total['HCU Enrollment Target'] = np.ceil(total['Total_HCUs'] * 0.05).astype(int)
 
     # Enrolled in Jan 2026
     jan = enrolled_df[
@@ -69,7 +66,7 @@ def build_summary(hcu_df, enrolled_df):
     summary['Enrolled_Feb_2026'] = summary['Enrolled_Feb_2026'].fillna(0).astype(int)
     summary['Total_Enrolled_2026'] = summary['Total_Enrolled_2026'].fillna(0).astype(int)
 
-    summary.columns = ['Employer Name', 'Total HCUs', 'HCU Enrollment Target', 
+    summary.columns = ['Employer Name', 'Total HCUs', 'HCU Enrollment Target',
                        'Enrolled Jan 2026', 'Enrolled Feb 2026', 'Total Enrolled 2026']
     summary = summary.sort_values('Total HCUs', ascending=False)
 
