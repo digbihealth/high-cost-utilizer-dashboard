@@ -8,6 +8,10 @@ st.set_page_config(page_title="High Cost Utilizer Dashboard", page_icon="💊", 
 
 st.title("💊 High Cost Utilizer Dashboard")
 
+if st.button("🔄 Refresh Data"):
+    st.cache_data.clear()
+    st.rerun()
+
 @st.cache_data(ttl=300)
 def load_data():
     scopes = ["https://www.googleapis.com/auth/spreadsheets.readonly"]
