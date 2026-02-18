@@ -18,70 +18,54 @@ def load_data():
     data = sheet.get_all_records()
     df = pd.DataFrame(data)
     
-    def parse_cost(val, year):
-        try:
-            d = json.loads(str(val).replace("'", '"'))
-            return float(d.get(str(year), 0))
-        except:
-            return 0.0
-    
-    df['Claim Cost 2024'] = df['claim_cost'].apply(lambda x: parse_cost(x, 2024))
-    df['Claim Cost 2025'] = df['claim_cost'].apply(lambda x: parse_cost(x, 2025))
-    df['Total Claim Cost'] = df['Claim Cost 2024'] + df['Claim Cost 2025']
+    # Parse signupDate to datetime
+    df['signupDate'] = pd.to_datetime(df['signupDate'], errors='coerce', utc=True)
     
     return df
 
 df = load_data()
 
-col1, col2, col3 = st.columns(3)
+# --- Build summary table by employer ---
+def build_summary(df):
+    summary = df.groupby('employerName').agg(
+        Total_HCUs=('userId', 'count')
+    ).reset_index()
+    
+    # Enrolled in Jan 2026
+    jan_enrolled = df[
+        (df['enrollmentStatus'] == 'ENROLLED') &
+        (df['signupDate'].dt.year == 2026) &
+        (df['signupDate'].dt.month == 1)
+    ].groupby('employerName').size().reset_index(name='Enrolled_Jan_2026')
+    
+    # Enrolled in Feb 2026
+    feb_enrolled = df[
+        (df['enrollmentStatus'] == 'ENROLLED') &
+        (df['signupDate'].dt.year == 2026) &
+        (df['signupDate'].dt.month == 2)
+    ].groupby('employerName').size().reset_index(name='Enrolled_Feb_2026')
+    
+    summary = summary.merge(jan_enrolled, on='employerName', how='left')
+    summary = summary.merge(feb_enrolled, on='employerName', how='left')
+    
+    summary['Enrolled_Jan_2026'] = summary['Enrolled_Jan_2026'].fillna(0).astype(int)
+    summary['Enrolled_Feb_2026'] = summary['Enrolled_Feb_2026'].fillna(0).astype(int)
+    
+    summary.columns = ['Employer Name', 'Total HCUs', 'Enrolled Jan 2026', 'Enrolled Feb 2026']
+    summary = summary.sort_values('Total HCUs', ascending=False)
+    
+    return summary
 
-with col1:
-    employers = ['All'] + sorted(df['employerName'].dropna().unique().tolist())
-    selected_employer = st.selectbox('Filter by Employer', employers)
+summary_df = build_summary(df)
 
-with col2:
-    statuses = ['All'] + sorted(df['enrollmentStatus'].dropna().unique().tolist())
-    selected_status = st.selectbox('Filter by Enrollment Status', statuses)
-
-with col3:
-    search = st.text_input('Search by Name or Email')
-
-sort_by = st.selectbox('Sort by', ['Total Claim Cost', 'Claim Cost 2025', 'Claim Cost 2024'])
-
-filtered = df.copy()
-
-if selected_employer != 'All':
-    filtered = filtered[filtered['employerName'] == selected_employer]
-
-if selected_status != 'All':
-    filtered = filtered[filtered['enrollmentStatus'] == selected_status]
-
-if search:
-    search_lower = search.lower()
-    filtered = filtered[
-        filtered['email'].str.lower().str.contains(search_lower, na=False) |
-        filtered['firstName'].str.lower().str.contains(search_lower, na=False) |
-        filtered['lastName'].str.lower().str.contains(search_lower, na=False)
-    ]
-
-filtered = filtered.sort_values(sort_by, ascending=False)
-
-st.markdown("---")
+# --- Metrics ---
 m1, m2, m3, m4 = st.columns(4)
-m1.metric("Total Users", f"{len(filtered):,}")
-m2.metric("Avg Claim Cost 2024", f"${filtered['Claim Cost 2024'].mean():,.0f}")
-m3.metric("Avg Claim Cost 2025", f"${filtered['Claim Cost 2025'].mean():,.0f}")
-m4.metric("Avg Total Claim Cost", f"${filtered['Total Claim Cost'].mean():,.0f}")
+m1.metric("Total Employers", f"{len(summary_df):,}")
+m2.metric("Total HCUs", f"{summary_df['Total HCUs'].sum():,}")
+m3.metric("Enrolled Jan 2026", f"{summary_df['Enrolled Jan 2026'].sum():,}")
+m4.metric("Enrolled Feb 2026", f"{summary_df['Enrolled Feb 2026'].sum():,}")
 
 st.markdown("---")
-display_cols = ['userId', 'email', 'firstName', 'lastName', 'employerName',
-                'companyName', 'enrollmentStatus', 'Claim Cost 2024',
-                'Claim Cost 2025', 'Total Claim Cost']
 
-display_df = filtered[display_cols].copy()
-display_df['Claim Cost 2024'] = display_df['Claim Cost 2024'].apply(lambda x: f"${x:,.2f}" if x > 0 else '-')
-display_df['Claim Cost 2025'] = display_df['Claim Cost 2025'].apply(lambda x: f"${x:,.2f}" if x > 0 else '-')
-display_df['Total Claim Cost'] = display_df['Total Claim Cost'].apply(lambda x: f"${x:,.2f}")
-
-st.dataframe(display_df, use_container_width=True, hide_index=True)
-st.caption(f"Showing {len(filtered):,} of {len(df):,} users")
+st.dataframe(summary_df, use_container_width=True, hide_index=True)
+st.caption(f"Showing {len(summary_df):,} employers")
