@@ -92,10 +92,8 @@ display_df['Total Claim Cost'] = display_df['Total Claim Cost'].apply(lambda x: 
 
 st.dataframe(display_df, use_container_width=True, hide_index=True)
 st.caption(f"Showing {len(filtered):,} of {len(df):,} users")
-```
 
 And the `requirements.txt`:
-```
 streamlit
 pandas
 gspread
