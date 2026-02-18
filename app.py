@@ -23,13 +23,8 @@ def load_data():
     hcu_df = pd.DataFrame(sheet.worksheet("High Cost Utilizer").get_all_records())
     enrolled_df = pd.DataFrame(sheet.worksheet("HCU Enrolled Data").get_all_records())
 
-    # Parse enrollment date
-    enrolled_df['parsed_date'] = pd.to_datetime(enrolled_df['enrollmentDate'], unit='ms', errors='coerce')
-    mask = enrolled_df['parsed_date'].isna()
-    if mask.any() and 'enrollmentDateFormatted' in enrolled_df.columns:
-        enrolled_df.loc[mask, 'parsed_date'] = pd.to_datetime(
-            enrolled_df.loc[mask, 'enrollmentDateFormatted'], format='%d/%m/%y', errors='coerce'
-        )
+    # Parse enrollmentDateFormatted directly (e.g. "28 March 2025", "7 February 2024")
+    enrolled_df['parsed_date'] = pd.to_datetime(enrolled_df['enrollmentDateFormatted'], errors='coerce')
 
     def parse_total_cost(val):
         try:
