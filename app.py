@@ -22,8 +22,14 @@ def load_data():
     hcu_df = pd.DataFrame(sheet.worksheet("High Cost Utilizer").get_all_records())
     enrolled_df = pd.DataFrame(sheet.worksheet("HCU Enrolled Data").get_all_records())
 
-    # Parse enrollmentDateFormatted (format: DD/MM/YY)
-    enrolled_df['parsed_date'] = pd.to_datetime(enrolled_df['enrollmentDateFormatted'], format='%d/%m/%y', errors='coerce')
+    # Try parsing from Unix ms first, fall back to formatted string
+    enrolled_df['parsed_date'] = pd.to_datetime(enrolled_df['enrollmentDate'], unit='ms', errors='coerce')
+
+    mask = enrolled_df['parsed_date'].isna()
+    if mask.any() and 'enrollmentDateFormatted' in enrolled_df.columns:
+        enrolled_df.loc[mask, 'parsed_date'] = pd.to_datetime(
+            enrolled_df.loc[mask, 'enrollmentDateFormatted'], format='%d/%m/%y', errors='coerce'
+        )
 
     return hcu_df, enrolled_df
 
@@ -61,8 +67,12 @@ def build_summary(hcu_df, enrolled_df):
     summary['Enrolled_Jan_2026'] = summary['Enrolled_Jan_2026'].fillna(0).astype(int)
     summary['Enrolled_Feb_2026'] = summary['Enrolled_Feb_2026'].fillna(0).astype(int)
 
+    # Percentage column
+    summary['Enrolled_Pct'] = (summary['Total_Enrolled_2026'] / summary['Total_HCUs'] * 100).round(1)
+
     summary.columns = ['Employer Name', 'Total HCUs', '2026 HCU Enrollment Target',
-                       'Total Enrolled 2026', 'Enrolled Jan 2026', 'Enrolled Feb 2026']
+                       'Total Enrolled 2026', 'Enrolled Jan 2026', 'Enrolled Feb 2026',
+                       'Total Enrolled 2026 %']
     summary = summary.sort_values('Total HCUs', ascending=False).reset_index(drop=True)
 
     return summary
@@ -70,28 +80,36 @@ def build_summary(hcu_df, enrolled_df):
 summary_df = build_summary(hcu_df, enrolled_df)
 
 # --- Metrics ---
+total_hcus_sum = summary_df['Total HCUs'].sum()
+total_enrolled_sum = summary_df['Total Enrolled 2026'].sum()
+enrolled_pct = round(total_enrolled_sum / total_hcus_sum * 100, 1) if total_hcus_sum > 0 else 0
+
 m1, m2, m3, m4, m5 = st.columns(5)
 m1.metric("Total Employers", f"{len(summary_df):,}")
-m2.metric("Total HCUs", f"{summary_df['Total HCUs'].sum():,}")
+m2.metric("Total HCUs", f"{total_hcus_sum:,}")
 m3.metric("2026 HCU Enrollment Target (40%)", f"{summary_df['2026 HCU Enrollment Target'].sum():,}")
-m4.metric("Enrolled Jan 2026", f"{summary_df['Enrolled Jan 2026'].sum():,}")
-m5.metric("Enrolled Feb 2026", f"{summary_df['Enrolled Feb 2026'].sum():,}")
+m4.metric("HCUs Enrolled 2026", f"{total_enrolled_sum:,}")
+m5.metric("HCUs Enrolled 2026 %", f"{enrolled_pct}%")
 
 st.markdown("---")
 
-# --- Format display with commas ---
+# --- Format display ---
 display_df = summary_df.copy()
 for col in ['Total HCUs', '2026 HCU Enrollment Target', 'Total Enrolled 2026', 'Enrolled Jan 2026', 'Enrolled Feb 2026']:
     display_df[col] = display_df[col].apply(lambda x: f"{x:,}")
+display_df['Total Enrolled 2026 %'] = display_df['Total Enrolled 2026 %'].apply(lambda x: f"{x}%")
 
-# --- Totals row pinned at bottom ---
+# --- Totals row ---
+total_hcus = summary_df['Total HCUs'].sum()
+total_enrolled = summary_df['Total Enrolled 2026'].sum()
 totals = {
     'Employer Name': 'TOTAL',
-    'Total HCUs': f"{summary_df['Total HCUs'].sum():,}",
+    'Total HCUs': f"{total_hcus:,}",
     '2026 HCU Enrollment Target': f"{summary_df['2026 HCU Enrollment Target'].sum():,}",
-    'Total Enrolled 2026': f"{summary_df['Total Enrolled 2026'].sum():,}",
+    'Total Enrolled 2026': f"{total_enrolled:,}",
     'Enrolled Jan 2026': f"{summary_df['Enrolled Jan 2026'].sum():,}",
-    'Enrolled Feb 2026': f"{summary_df['Enrolled Feb 2026'].sum():,}"
+    'Enrolled Feb 2026': f"{summary_df['Enrolled Feb 2026'].sum():,}",
+    'Total Enrolled 2026 %': f"{round(total_enrolled / total_hcus * 100, 1)}%"
 }
 display_df = pd.concat([display_df, pd.DataFrame([totals])], ignore_index=True)
 
