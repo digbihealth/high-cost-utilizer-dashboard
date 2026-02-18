@@ -31,7 +31,6 @@ def load_data():
             enrolled_df.loc[mask, 'enrollmentDateFormatted'], format='%d/%m/%y', errors='coerce'
         )
 
-    # Parse claim_cost JSON into total (2024 + 2025)
     def parse_total_cost(val):
         try:
             d = json.loads(str(val).replace("'", '"'))
@@ -47,7 +46,6 @@ def load_data():
 hcu_df, enrolled_df = load_data()
 
 def build_summary(hcu_df, enrolled_df):
-    # Total HCUs and claim cost per employer
     total = hcu_df.groupby('employerName').agg(
         Total_HCUs=('userId', 'count'),
         Total_Claim_Cost=('total_claim_cost', 'sum')
@@ -55,7 +53,6 @@ def build_summary(hcu_df, enrolled_df):
 
     total['2026 HCU Enrollment Target'] = np.ceil(total['Total_HCUs'] * 0.30).astype(int)
 
-    # Total enrolled in 2026 and their claim cost
     enrolled_2026 = enrolled_df[enrolled_df['parsed_date'].dt.year == 2026]
 
     total_2026 = enrolled_2026.groupby('employerName').agg(
@@ -68,10 +65,19 @@ def build_summary(hcu_df, enrolled_df):
     summary['Total_Enrolled_2026'] = summary['Total_Enrolled_2026'].fillna(0).astype(int)
     summary['Enrolled_Claim_Cost'] = summary['Enrolled_Claim_Cost'].fillna(0)
     summary['Enrolled_Pct'] = (summary['Total_Enrolled_2026'] / summary['Total_HCUs'] * 100).round(1)
+    summary['Enrolled_Claim_Cost_Pct'] = (summary['Enrolled_Claim_Cost'] / summary['Total_Claim_Cost'] * 100).round(1)
 
-    summary.columns = ['Employer Name', 'Total HCUs', 'Total Claim Cost',
-                       '2026 HCU Enrollment Target', 'Total Enrolled 2026',
-                       'Enrolled Claim Cost', 'Total Enrolled 2026 %']
+    summary = summary[[
+        'employerName', 'Total_HCUs', '2026 HCU Enrollment Target',
+        'Total_Enrolled_2026', 'Enrolled_Pct',
+        'Total_Claim_Cost', 'Enrolled_Claim_Cost', 'Enrolled_Claim_Cost_Pct'
+    ]]
+
+    summary.columns = [
+        'Employer Name', 'Total HCUs', '2026 HCU Enrollment Target',
+        'Total Enrolled 2026', 'Total Enrolled 2026 %',
+        'Total Claim Cost', 'Enrolled Claim Cost', 'Enrolled Claim Cost %'
+    ]
     summary = summary.sort_values('Total HCUs', ascending=False).reset_index(drop=True)
 
     return summary
@@ -96,21 +102,25 @@ st.markdown("---")
 display_df = summary_df.copy()
 for col in ['Total HCUs', '2026 HCU Enrollment Target', 'Total Enrolled 2026']:
     display_df[col] = display_df[col].apply(lambda x: f"{x:,}")
-display_df['Total Enrolled 2026 %'] = display_df['Total Enrolled 2026 %'].apply(lambda x: f"{x}%")
+display_df['Total Enrolled 2026 %'] = summary_df['Total Enrolled 2026 %'].apply(lambda x: f"{x}%")
 display_df['Total Claim Cost'] = summary_df['Total Claim Cost'].apply(lambda x: f"${x:,.0f}")
 display_df['Enrolled Claim Cost'] = summary_df['Enrolled Claim Cost'].apply(lambda x: f"${x:,.0f}")
+display_df['Enrolled Claim Cost %'] = summary_df['Enrolled Claim Cost %'].apply(lambda x: f"{x}%")
 
 # --- Totals row ---
 total_hcus = summary_df['Total HCUs'].sum()
 total_enrolled = summary_df['Total Enrolled 2026'].sum()
+total_claim = summary_df['Total Claim Cost'].sum()
+enrolled_claim = summary_df['Enrolled Claim Cost'].sum()
 totals = {
     'Employer Name': 'TOTAL',
     'Total HCUs': f"{total_hcus:,}",
-    'Total Claim Cost': f"${summary_df['Total Claim Cost'].sum():,.0f}",
     '2026 HCU Enrollment Target': f"{summary_df['2026 HCU Enrollment Target'].sum():,}",
     'Total Enrolled 2026': f"{total_enrolled:,}",
-    'Enrolled Claim Cost': f"${summary_df['Enrolled Claim Cost'].sum():,.0f}",
-    'Total Enrolled 2026 %': f"{round(total_enrolled / total_hcus * 100, 1)}%"
+    'Total Enrolled 2026 %': f"{round(total_enrolled / total_hcus * 100, 1)}%",
+    'Total Claim Cost': f"${total_claim:,.0f}",
+    'Enrolled Claim Cost': f"${enrolled_claim:,.0f}",
+    'Enrolled Claim Cost %': f"{round(enrolled_claim / total_claim * 100, 1)}%"
 }
 display_df = pd.concat([display_df, pd.DataFrame([totals])], ignore_index=True)
 
