@@ -8,7 +8,6 @@ st.set_page_config(page_title="High Cost Utilizer Dashboard", page_icon="💊", 
 
 st.title("💊 High Cost Utilizer Dashboard")
 
-# --- Load Data ---
 @st.cache_data(ttl=300)
 def load_data():
     scopes = ["https://www.googleapis.com/auth/spreadsheets.readonly"]
@@ -19,7 +18,6 @@ def load_data():
     data = sheet.get_all_records()
     df = pd.DataFrame(data)
     
-    # Parse claim_cost JSON into separate columns
     def parse_cost(val, year):
         try:
             d = json.loads(str(val).replace("'", '"'))
@@ -35,7 +33,6 @@ def load_data():
 
 df = load_data()
 
-# --- Filters ---
 col1, col2, col3 = st.columns(3)
 
 with col1:
@@ -49,10 +46,8 @@ with col2:
 with col3:
     search = st.text_input('Search by Name or Email')
 
-# Sort
 sort_by = st.selectbox('Sort by', ['Total Claim Cost', 'Claim Cost 2025', 'Claim Cost 2024'])
 
-# --- Apply Filters ---
 filtered = df.copy()
 
 if selected_employer != 'All':
@@ -71,7 +66,6 @@ if search:
 
 filtered = filtered.sort_values(sort_by, ascending=False)
 
-# --- Summary Metrics ---
 st.markdown("---")
 m1, m2, m3, m4 = st.columns(4)
 m1.metric("Total Users", f"{len(filtered):,}")
@@ -79,10 +73,9 @@ m2.metric("Avg Claim Cost 2024", f"${filtered['Claim Cost 2024'].mean():,.0f}")
 m3.metric("Avg Claim Cost 2025", f"${filtered['Claim Cost 2025'].mean():,.0f}")
 m4.metric("Avg Total Claim Cost", f"${filtered['Total Claim Cost'].mean():,.0f}")
 
-# --- Table ---
 st.markdown("---")
-display_cols = ['userId', 'email', 'firstName', 'lastName', 'employerName', 
-                'companyName', 'enrollmentStatus', 'Claim Cost 2024', 
+display_cols = ['userId', 'email', 'firstName', 'lastName', 'employerName',
+                'companyName', 'enrollmentStatus', 'Claim Cost 2024',
                 'Claim Cost 2025', 'Total Claim Cost']
 
 display_df = filtered[display_cols].copy()
@@ -92,9 +85,3 @@ display_df['Total Claim Cost'] = display_df['Total Claim Cost'].apply(lambda x: 
 
 st.dataframe(display_df, use_container_width=True, hide_index=True)
 st.caption(f"Showing {len(filtered):,} of {len(df):,} users")
-
-And the `requirements.txt`:
-streamlit
-pandas
-gspread
-google-auth
