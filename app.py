@@ -21,7 +21,16 @@ def load_data():
 
     hcu_df = pd.DataFrame(sheet.worksheet("High Cost Utilizer").get_all_records())
     enrolled_df = pd.DataFrame(sheet.worksheet("HCU Enrolled Data").get_all_records())
-    enrolled_df['enrollmentDate'] = pd.to_datetime(enrolled_df['enrollmentDate'], unit='ms', errors='coerce')
+
+    # Debug: show all column names
+    st.write("Enrolled columns:", enrolled_df.columns.tolist())
+    st.write("Sample enrollmentDate:", enrolled_df['enrollmentDate'].head(3).tolist())
+    st.write("Sample enrollmentDateFormatted:", enrolled_df['enrollmentDateFormatted'].head(3).tolist() if 'enrollmentDateFormatted' in enrolled_df.columns else "N/A")
+
+    # Parse both possible date columns
+    enrolled_df['parsed_date'] = pd.to_datetime(enrolled_df['enrollmentDate'], unit='ms', errors='coerce')
+    if enrolled_df['parsed_date'].isna().all() and 'enrollmentDateFormatted' in enrolled_df.columns:
+        enrolled_df['parsed_date'] = pd.to_datetime(enrolled_df['enrollmentDateFormatted'], errors='coerce', dayfirst=True)
 
     return hcu_df, enrolled_df
 
@@ -32,23 +41,23 @@ def build_summary(hcu_df, enrolled_df):
         Total_HCUs=('userId', 'count')
     ).reset_index()
 
-    total['HCU Enrollment Target'] = np.ceil(total['Total_HCUs'] * 0.05).astype(int)
+    total['2026 HCU Enrollment Target'] = np.ceil(total['Total_HCUs'] * 0.40).astype(int)
 
     # Total enrolled in 2026
     total_2026 = enrolled_df[
-        enrolled_df['enrollmentDate'].dt.year == 2026
+        enrolled_df['parsed_date'].dt.year == 2026
     ].groupby('employerName').size().reset_index(name='Total_Enrolled_2026')
 
     # Enrolled in Jan 2026
     jan = enrolled_df[
-        (enrolled_df['enrollmentDate'].dt.year == 2026) &
-        (enrolled_df['enrollmentDate'].dt.month == 1)
+        (enrolled_df['parsed_date'].dt.year == 2026) &
+        (enrolled_df['parsed_date'].dt.month == 1)
     ].groupby('employerName').size().reset_index(name='Enrolled_Jan_2026')
 
     # Enrolled in Feb 2026
     feb = enrolled_df[
-        (enrolled_df['enrollmentDate'].dt.year == 2026) &
-        (enrolled_df['enrollmentDate'].dt.month == 2)
+        (enrolled_df['parsed_date'].dt.year == 2026) &
+        (enrolled_df['parsed_date'].dt.month == 2)
     ].groupby('employerName').size().reset_index(name='Enrolled_Feb_2026')
 
     summary = total.merge(total_2026, on='employerName', how='left')
@@ -59,9 +68,9 @@ def build_summary(hcu_df, enrolled_df):
     summary['Enrolled_Jan_2026'] = summary['Enrolled_Jan_2026'].fillna(0).astype(int)
     summary['Enrolled_Feb_2026'] = summary['Enrolled_Feb_2026'].fillna(0).astype(int)
 
-    summary.columns = ['Employer Name', 'Total HCUs', 'HCU Enrollment Target',
+    summary.columns = ['Employer Name', 'Total HCUs', '2026 HCU Enrollment Target',
                        'Total Enrolled 2026', 'Enrolled Jan 2026', 'Enrolled Feb 2026']
-    summary = summary.sort_values('Total HCUs', ascending=False)
+    summary = summary.sort_values('Total HCUs', ascending=False).reset_index(drop=True)
 
     return summary
 
@@ -71,22 +80,22 @@ summary_df = build_summary(hcu_df, enrolled_df)
 m1, m2, m3, m4, m5 = st.columns(5)
 m1.metric("Total Employers", f"{len(summary_df):,}")
 m2.metric("Total HCUs", f"{summary_df['Total HCUs'].sum():,}")
-m3.metric("2026 HCU Enrollment Target (5%)", f"{summary_df['HCU Enrollment Target'].sum():,}")
+m3.metric("2026 HCU Enrollment Target (40%)", f"{summary_df['2026 HCU Enrollment Target'].sum():,}")
 m4.metric("Enrolled Jan 2026", f"{summary_df['Enrolled Jan 2026'].sum():,}")
 m5.metric("Enrolled Feb 2026", f"{summary_df['Enrolled Feb 2026'].sum():,}")
 
 st.markdown("---")
 
-# --- Format numbers with commas ---
+# --- Format display with commas ---
 display_df = summary_df.copy()
-for col in ['Total HCUs', 'HCU Enrollment Target', 'Total Enrolled 2026', 'Enrolled Jan 2026', 'Enrolled Feb 2026']:
+for col in ['Total HCUs', '2026 HCU Enrollment Target', 'Total Enrolled 2026', 'Enrolled Jan 2026', 'Enrolled Feb 2026']:
     display_df[col] = display_df[col].apply(lambda x: f"{x:,}")
 
-# --- Totals row ---
+# --- Totals row pinned at bottom ---
 totals = {
     'Employer Name': 'TOTAL',
     'Total HCUs': f"{summary_df['Total HCUs'].sum():,}",
-    'HCU Enrollment Target': f"{summary_df['HCU Enrollment Target'].sum():,}",
+    '2026 HCU Enrollment Target': f"{summary_df['2026 HCU Enrollment Target'].sum():,}",
     'Total Enrolled 2026': f"{summary_df['Total Enrolled 2026'].sum():,}",
     'Enrolled Jan 2026': f"{summary_df['Enrolled Jan 2026'].sum():,}",
     'Enrolled Feb 2026': f"{summary_df['Enrolled Feb 2026'].sum():,}"
