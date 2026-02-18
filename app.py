@@ -14,7 +14,7 @@ def load_data():
     creds = Credentials.from_service_account_info(st.secrets["gcp_service_account"], scopes=scopes)
     client = gspread.authorize(creds)
     
-    sheet = client.open("Enrollment campaigns tracking").worksheet("High Cost Utilizer")
+    sheet = client.open_by_key("1g9bHdsz-jG6Bp14JT2U2HZcFe6GA3b3nm80aemkGvH0").worksheet("High Cost Utilizer")
     data = sheet.get_all_records()
     df = pd.DataFrame(data)
     
