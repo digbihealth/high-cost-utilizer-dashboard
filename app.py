@@ -22,15 +22,8 @@ def load_data():
     hcu_df = pd.DataFrame(sheet.worksheet("High Cost Utilizer").get_all_records())
     enrolled_df = pd.DataFrame(sheet.worksheet("HCU Enrolled Data").get_all_records())
 
-    # Debug: show all column names
-    st.write("Enrolled columns:", enrolled_df.columns.tolist())
-    st.write("Sample enrollmentDate:", enrolled_df['enrollmentDate'].head(3).tolist())
-    st.write("Sample enrollmentDateFormatted:", enrolled_df['enrollmentDateFormatted'].head(3).tolist() if 'enrollmentDateFormatted' in enrolled_df.columns else "N/A")
-
-    # Parse both possible date columns
-    enrolled_df['parsed_date'] = pd.to_datetime(enrolled_df['enrollmentDate'], unit='ms', errors='coerce')
-    if enrolled_df['parsed_date'].isna().all() and 'enrollmentDateFormatted' in enrolled_df.columns:
-        enrolled_df['parsed_date'] = pd.to_datetime(enrolled_df['enrollmentDateFormatted'], errors='coerce', dayfirst=True)
+    # Parse enrollmentDateFormatted (format: DD/MM/YY)
+    enrolled_df['parsed_date'] = pd.to_datetime(enrolled_df['enrollmentDateFormatted'], format='%d/%m/%y', errors='coerce')
 
     return hcu_df, enrolled_df
 
@@ -100,8 +93,7 @@ totals = {
     'Enrolled Jan 2026': f"{summary_df['Enrolled Jan 2026'].sum():,}",
     'Enrolled Feb 2026': f"{summary_df['Enrolled Feb 2026'].sum():,}"
 }
-totals_df = pd.DataFrame([totals])
-display_df = pd.concat([display_df, totals_df], ignore_index=True)
+display_df = pd.concat([display_df, pd.DataFrame([totals])], ignore_index=True)
 
 st.dataframe(display_df, use_container_width=True, hide_index=True)
 st.caption(f"Showing {len(summary_df):,} employers")
